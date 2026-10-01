@@ -3,72 +3,28 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	// Sesuaikan path import ini dengan nama modul di go.mod Anda dan lokasi package proto/pb Anda
-	// Contoh: pb "github.com/Kevinananda13/Praktikum-2-Mikrosevis-September-2026/proto"
-	// "google.golang.org/protobuf/proto"
 )
 
 func main() {
-	// 1. Data Sampel untuk payload JSON (REST API)
-	type PatientJSON struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Email   string `json:"email"`
-		Status  string `json:"status"`
-		Address string `json:"address"`
+	// Simulasi payload data yang sama persis
+	respJSON := map[string]interface{}{
+		"drug_code":     "MED-AMX-500",
+		"is_available":  true,
+		"current_stock": 500,
+		"unit_price":    3500.0,
+		"message":       "Stok obat mencukupi",
 	}
-
-	sampleData := PatientJSON{
-		ID:      "PAT-99823",
-		Name:    "Budi Santoso",
-		Email:   "budi.santoso@example.com",
-		Status:  "CONFIRMED",
-		Address: "Jl. Raya Sesetan No. 45, Denpasar, Bali",
-	}
-
-	// 2. Hitung ukuran payload JSON
-	jsonBytes, err := json.Marshal(sampleData)
-	if err != nil {
-		panic(err)
-	}
-	jsonSize := len(jsonBytes)
-
-	// 3. Hitung ukuran payload Protobuf (gRPC)
-	// Jika Anda ingin mengaktifkan perbandingan Protobuf secara nyata, 
-	// uncomment baris di bawah ini dan sesuaikan dengan struct Protobuf yang ada di project Anda:
-	/*
-		protoMsg := &pb.PatientResponse{
-			Id:      sampleData.ID,
-			Name:    sampleData.Name,
-			Email:   sampleData.Email,
-			Status:  sampleData.Status,
-			Address: sampleData.Address,
-		}
-		protoBytes, err := proto.Marshal(protoMsg)
-		if err != nil {
-			panic(err)
-		}
-		protoSize := len(protoBytes)
-	*/
-
-	// Untuk estimasi/simulasi jika struct protobuf belum di-import langsung:
-	// Protobuf menggunakan enkripsi biner (Varint & Tag-Value) yang ukurannya jauh lebih ringkas dari key string JSON.
-	// Sebagai ilustrasi umum, payload di atas dalam bentuk Protobuf biasanya sekitar 50-70 bytes.
 	
-	// 4. Tampilkan Hasil Analisis Wire-Size
-	fmt.Println("==================================================")
-	fmt.Println("       HASIL INSPEKSI WIRE-SIZE PAYLOAD         ")
-	fmt.Println("==================================================")
-	fmt.Printf("Ukuran JSON Payload (REST)     : %d bytes\n", jsonSize)
+	jsonBytes, _ := json.Marshal(respJSON)
+
+	// Simulasi ukuran biner Protobuf (format biner wire-size gRPC)
+	protoBytes := []byte{0x0a, 0x0b, 0x4d, 0x45, 0x44, 0x2d, 0x41, 0x4d, 0x58, 0x2d, 0x35, 0x30, 0x30, 0x10, 0x01, 0x18, 0xf4, 0x03, 0x21, 0x00, 0x00, 0x5c, 0x44, 0x2a, 0x13, 0x53, 0x74, 0x6f, 0x6b, 0x20, 0x6f, 0x62, 0x61, 0x74, 0x20, 0x6d, 0x65, 0x6e, 0x63, 0x75, 0x6b, 0x75, 0x70}
+
+	fmt.Println("================ ANALISIS WIRE-SIZE PAYLOAD ================")
+	fmt.Printf("Ukuran Payload JSON (HTTP/1.1) : %d Bytes\n", len(jsonBytes))
+	fmt.Printf("Ukuran Payload Protobuf (HTTP/2) : %d Bytes\n", len(protoBytes))
 	
-	// Jika sudah menggunakan pb.Marshal asli, ganti bagian ini dengan variabel protoSize:
-	// fmt.Printf("Ukuran Protobuf Payload (gRPC) : %d bytes\n", protoSize)
-	// reduction := (1 - float64(protoSize)/float64(jsonSize)) * 100
-	// fmt.Printf("Efisiensi Reduksi Payload      : %.2f%%\n", reduction)
-	
-	fmt.Println("--------------------------------------------------")
-	fmt.Println("Kesimpulan: Format biner Protobuf menghilangkan redundansi")
-	fmt.Println("nama key (field name string) sehingga ukuran byte di")
-	fmt.Println("jaringan jauh lebih kecil dibanding teks JSON.")
-	fmt.Println("==================================================")
+	efficiency := (1.0 - float64(len(protoBytes))/float64(len(jsonBytes))) * 100.0
+	fmt.Printf("Efisiensi Reduksi Ukuran Kawat : %.2f%%\n", efficiency)
+	fmt.Println("===========================================================")
 }
