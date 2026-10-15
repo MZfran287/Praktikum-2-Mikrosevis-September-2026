@@ -14,7 +14,7 @@ func main() {
 		"unit_price":    3500.0,
 		"message":       "Stok obat mencukupi",
 	}
-	
+
 	jsonBytes, _ := json.Marshal(respJSON)
 
 	// Simulasi ukuran biner Protobuf (format biner wire-size gRPC)
@@ -23,7 +23,7 @@ func main() {
 	fmt.Println("================ ANALISIS WIRE-SIZE PAYLOAD ================")
 	fmt.Printf("Ukuran Payload JSON (HTTP/1.1) : %d Bytes\n", len(jsonBytes))
 	fmt.Printf("Ukuran Payload Protobuf (HTTP/2) : %d Bytes\n", len(protoBytes))
-	
+
 	efficiency := (1.0 - float64(len(protoBytes))/float64(len(jsonBytes))) * 100.0
 	fmt.Printf("Efisiensi Reduksi Ukuran Kawat : %.2f%%\n", efficiency)
 	fmt.Println("===========================================================")
