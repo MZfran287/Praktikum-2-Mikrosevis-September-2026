@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"time"
 
+	"pharmacy-service/consumer" // <--- IMPORT CONSUMER BARU KITA
 	pb "pharmacy-service/pb"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -35,7 +37,6 @@ func (s *server) CheckDrugAvailability(ctx context.Context, req *pb.CheckDrugReq
 	log.Printf("[gRPC Server] Memeriksa stok obat: %s, jumlah diminta: %d", req.GetDrugCode(), req.GetQuantityNeeded())
 
 	// === SIMULASI DATABASE BOTTLENECK (Langkah 3.4) ===
-	// Server ditahan selama 2 detik untuk mensimulasikan latensi database
 	time.Sleep(2 * time.Second)
 	// ====================================================
 
@@ -89,7 +90,7 @@ func startRESTServer(mongoClient *mongo.Client) {
 		coll := mongoClient.Database("medcore_pharmacy_db").Collection("drugs")
 		var drug DrugDoc
 		err := coll.FindOne(ctx, bson.M{"drug_code": drugCode}).Decode(&drug)
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
@@ -101,14 +102,13 @@ func startRESTServer(mongoClient *mongo.Client) {
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
-
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"drug_code":    drug.DrugCode,
-			"is_available": drug.TotalStock >= 10,
+			"drug_code":     drug.DrugCode,
+			"is_available":  drug.TotalStock >= 10,
 			"current_stock": drug.TotalStock,
-			"unit_price":   drug.UnitPrice,
-			"message":      "Stok obat mencukupi",
+			"unit_price":    drug.UnitPrice,
+			"message":       "Stok obat mencukupi",
 		})
 	})
 
@@ -122,15 +122,34 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	mongoURI := "mongodb://adm_pharmacy_svc:SecuredPassPharm2026!@localhost:27017/medcore_pharmacy_db?authSource=admin"
+	// 1. KONEKSI MONGODB
+	mongoURI := "mongodb://adm_pharmacy_svc:SecuredPassPharm2026!@127.0.0.1:27017/medcore_pharmacy_db?authSource=admin"
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		log.Fatalf("Gagal terhubung ke MongoDB: %v", err)
 	}
+	// Mendefinisikan database untuk consumer
+	db := client.Database("medcore_pharmacy_db")
 
 	// Jalankan REST server secara konkuren (background goroutine)
 	go startRESTServer(client)
 
+	// ==============================================================================
+	// 2. KONEKSI RABBITMQ & MENJALANKAN CONSUMER (BAGIAN BARU)
+	// ==============================================================================
+	rabbitURL := "amqp://admin_medcore:SecuredPassRabbit2026!@127.0.0.1:5672/%2Fmedcore_vhost"
+	rabbitConn, err := amqp.Dial(rabbitURL)
+	if err != nil {
+		log.Fatalf("Gagal koneksi ke RabbitMQ: %v", err)
+	}
+	defer rabbitConn.Close()
+
+	prescriptionConsumer := consumer.NewPrescriptionConsumer(rabbitConn, db)
+	// Jalankan Consumer sebagai Goroutine
+	go prescriptionConsumer.Start()
+	// ==============================================================================
+
+	// 3. MENJALANKAN gRPC SERVER
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("Gagal membuka port 50051: %v", err)
