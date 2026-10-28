@@ -1,0 +1,46 @@
+# ==========================================
+# STAGE 1: Compilation Environment (Builder)
+# ==========================================
+FROM golang:1.23-alpine AS builder
+
+# Pasang dependensi sertifikat, git, dan zona waktu
+RUN apk add --no-cache ca-certificates git tzdata
+WORKDIR /src
+
+# Cache Dependency Layer: Salin go.mod & go.sum terlebih dahulu
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+# Salin seluruh source code pharmacy-service
+COPY . .
+
+# Kompilasi Static Binary khusus untuk Pharmacy Service
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s -extldflags '-static'" \
+    -o /bin/medcore-pharmacy-app main.go
+
+# ==========================================
+# STAGE 2: Minimalist Production Runtime
+# ==========================================
+FROM alpine:3.19 AS runner
+
+# Keamanan: Buat unprivileged user khusus (non-root medcore)
+RUN addgroup -g 10001 -S medcore && \
+    adduser -u 10001 -S medcore -G medcore
+
+# Pasang CA-certificates dan zona waktu UTC
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+
+# Salin biner hasil kompilasi dari stage builder
+COPY --from=builder /bin/medcore-pharmacy-app /app/medcore-pharmacy-app
+
+# Atur kepemilikan dan beralih ke non-root user
+RUN chown -R medcore:medcore /app
+USER medcore:medcore
+
+# Expose port gRPC (50051) dan REST baseline (8081)
+EXPOSE 50051 8081
+
+# Eksekusi biner langsung (Exec form)
+ENTRYPOINT ["/app/medcore-pharmacy-app"]
